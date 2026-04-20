@@ -30,7 +30,7 @@ cp saved_database/topsoz.db assets/db/topsoz.db
 
 ## Architecture
 
-**App launch flow:** `main.dart` (FFI init + SharedPreferences overrides) → `app.dart` (MaterialApp.router) → SplashScreen → OnboardingScreen (one-time) → GoRouter
+**App launch flow:** `main.dart` (FFI init + AdService init + SharedPreferences overrides) → `app.dart` (MaterialApp.router) → SplashScreen → OnboardingScreen (one-time) → GoRouter
 
 **SQLite init:** Uses `sqflite_common_ffi` + `sqlite3_flutter_libs` (not default sqflite) to enable FTS5 on Android. `databaseFactory = databaseFactoryFfi` is set in `main()`.
 
@@ -85,12 +85,23 @@ Word detail uses parent navigator (`_rootNavigatorKey`): `/word/:id` — overlay
 - `words_fts` — FTS5 external content table (word, word_cyrillic, concatenated definitions)
 - Indexes: `idx_words_lang`, `idx_words_word` (COLLATE NOCASE), `idx_words_cyrillic`, `idx_defs_word`, `idx_fav_created`, `idx_hist_searched`
 
+### Ads & Monetization (AdService)
+`lib/core/services/ad_service.dart` — singleton (`AdService.instance`) managing AdMob banner, interstitial, rewarded, and native ads. **Used directly in widgets, NOT via Riverpod providers.** AdMob IDs are hardcoded in the service.
+
+**Premium system:** If the user watches 3 rewarded videos within 24 hours, ads are hidden for 24 hours. State persisted in SharedPreferences under `premium_activated_at` (epoch ms) and `rewarded_count_today`. Always check `await AdService.instance.isPremiumActive()` before showing ads. Premium reset logic runs per-day.
+
+Widget wrappers: `BannerAdWidget`, `NativeAdWidget` (in `lib/core/widgets/`). Interstitial/rewarded are triggered imperatively from screens.
+
 ### Data Pipeline (tools/)
 `download_sources.py` fetches 10 sources (git clone + HTTP) into `raw_data/`. Each parser in `tools/parsers/` outputs a common dict format: `{word, language, pos, definitions[], target_language, pronunciation, etymology, examples[], source}`. `build_database.py` merges all, deduplicates via UNIQUE constraints (same word allowed across different sources), generates Cyrillic variants via `transliterate.py`, builds FTS5 index, runs VACUUM+ANALYZE. Additional scripts: `enrich_database.py` (post-processing), `test_database.py` (validation queries).
 
 ## UI Design
 
-Quari Translate (Dribbble) inspired — soft pastel colors, large rounded corners (20-28px), pill-shaped buttons. Colors: primary `#9685FF` (purple), secondary `#FF865E` (coral), background `#A2D2FF` (light blue), surface `#FEF9EF` (cream). Font: Rubik (Google Fonts). All UI labels are in Uzbek (Latin script).
+Quari Translate (Dribbble) inspired — soft pastel colors in light theme, large rounded corners (20-28px), pill-shaped buttons. Colors defined in `lib/core/theme/app_colors.dart`:
+- **Light theme:** primary `#9685FF` (purple), secondary `#FF865E` (coral), background `#A2D2FF` (light blue), surface `#FEF9EF` (cream)
+- **Dark theme:** `darkBackground #121220`, `darkSurface #1E1E32`, `darkSurfaceLight #2A2A42`, purple/coral accents preserved
+
+Theme mode is user-toggleable via `themeModeProvider` (persisted in SharedPreferences). Font scale is also user-adjustable via `fontScaleProvider`. Font: Rubik (Google Fonts). All UI labels are in Uzbek (Latin script).
 
 ## Language
 
