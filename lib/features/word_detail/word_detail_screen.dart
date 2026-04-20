@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 import 'package:share_plus/share_plus.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/widgets/banner_ad_widget.dart';
@@ -201,106 +200,6 @@ class WordDetailScreen extends ConsumerWidget {
             ),
           ),
 
-        if (word.relatedEntries.isNotEmpty)
-          SliverToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(24, 0, 24, 16),
-              child: Container(
-                padding: const EdgeInsets.all(24),
-                decoration: BoxDecoration(
-                  color: Theme.of(context).cardTheme.color,
-                  borderRadius: BorderRadius.circular(28),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      "Boshqa manbalar",
-                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    ...word.relatedEntries.map(
-                      (entry) => Padding(
-                        padding: const EdgeInsets.only(bottom: 10),
-                        child: Material(
-                          color: Theme.of(context).brightness == Brightness.dark
-                              ? AppColors.darkSurfaceLight
-                              : AppColors.surface,
-                          borderRadius: BorderRadius.circular(16),
-                          child: InkWell(
-                            borderRadius: BorderRadius.circular(16),
-                            onTap: () => context.push('/word/${entry.id}'),
-                            child: Padding(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 16,
-                                vertical: 14,
-                              ),
-                              child: Row(
-                                children: [
-                                  Expanded(
-                                    child: Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: [
-                                        Wrap(
-                                          spacing: 8,
-                                          runSpacing: 6,
-                                          children: [
-                                            _buildChip(
-                                              entry.source,
-                                              AppColors.secondary,
-                                            ),
-                                            if (entry.partOfSpeech.isNotEmpty)
-                                              _buildChip(
-                                                entry.partOfSpeech,
-                                                AppColors.primary,
-                                              ),
-                                          ],
-                                        ),
-                                        if (entry
-                                            .firstDefinition
-                                            .isNotEmpty) ...[
-                                          const SizedBox(height: 8),
-                                          Text(
-                                            entry.firstDefinition,
-                                            style: Theme.of(context)
-                                                .textTheme
-                                                .bodyMedium
-                                                ?.copyWith(
-                                                  color:
-                                                      Theme.of(
-                                                            context,
-                                                          ).brightness ==
-                                                          Brightness.dark
-                                                      ? AppColors
-                                                            .darkTextSecondary
-                                                      : AppColors.textSecondary,
-                                                ),
-                                          ),
-                                        ],
-                                      ],
-                                    ),
-                                  ),
-                                  const SizedBox(width: 8),
-                                  const Icon(
-                                    Icons.chevron_right_rounded,
-                                    color: AppColors.textLight,
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-
         // Etimologiya
         if (word.etymology.isNotEmpty)
           SliverToBoxAdapter(
@@ -489,6 +388,18 @@ class WordDetailScreen extends ConsumerWidget {
                   def.definition,
                   style: Theme.of(context).textTheme.bodyLarge,
                 ),
+                if (def.source.isNotEmpty) ...[
+                  const SizedBox(height: 6),
+                  Text(
+                    def.source,
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: Theme.of(context).brightness == Brightness.dark
+                          ? AppColors.darkTextLight
+                          : AppColors.textLight,
+                      fontStyle: FontStyle.italic,
+                    ),
+                  ),
+                ],
                 if (def.exampleSource.isNotEmpty) ...[
                   const SizedBox(height: 8),
                   Container(

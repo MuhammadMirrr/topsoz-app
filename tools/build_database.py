@@ -2,13 +2,45 @@
 Barcha manbalarni birlashtirb SQLite baza yaratish.
 Natija: saved_database/topsoz.db
 """
+import html
 import os
+import re
 import sys
 import sqlite3
 
 # Parsers va transliterate modullarini import qilish
 sys.path.insert(0, os.path.dirname(__file__))
 from transliterate import latin_to_cyrillic, is_cyrillic
+
+# HTML tozalash uchun regexlar
+_RE_BR = re.compile(r"<\s*br\s*/?\s*>", re.IGNORECASE)
+_RE_LI_OPEN = re.compile(r"<\s*li\s*[^>]*>", re.IGNORECASE)
+_RE_BLOCK_CLOSE = re.compile(r"<\s*/\s*(p|div|ol|ul|li)\s*>", re.IGNORECASE)
+_RE_TAG = re.compile(r"<[^>]+>")
+_RE_MULTINEWLINE = re.compile(r"\n\s*\n+")
+_RE_MULTISPACE = re.compile(r"[ \t]+")
+
+
+def clean_html(text):
+    """HTML teglarini olib tashlaydi, entitylarni dekod qiladi.
+
+    Masalan:
+        "<i>noun</i><br><ol><li>oblast, province</li></ol>"
+        → "noun\n• oblast, province"
+    """
+    if not text:
+        return text
+    if "<" not in text and "&" not in text:
+        return text
+
+    result = _RE_BR.sub("\n", text)
+    result = _RE_LI_OPEN.sub("\n• ", result)
+    result = _RE_BLOCK_CLOSE.sub("\n", result)
+    result = _RE_TAG.sub("", result)
+    result = html.unescape(result)
+    result = _RE_MULTINEWLINE.sub("\n", result)
+    result = _RE_MULTISPACE.sub(" ", result)
+    return result.strip()
 from search_index import DB_VERSION, rebuild_search_index
 from parsers.parse_kaikki import parse_kaikki
 from parsers.parse_vuizur import parse_vuizur
@@ -136,6 +168,7 @@ def insert_entries(conn, all_entries):
 
         for i, defn in enumerate(definitions):
             defn = defn.strip() if isinstance(defn, str) else str(defn).strip()
+            defn = clean_html(defn)
             if not defn:
                 continue
 
@@ -154,8 +187,8 @@ def insert_entries(conn, all_entries):
             if i < len(examples):
                 ex = examples[i]
                 if isinstance(ex, (tuple, list)) and len(ex) >= 1:
-                    ex_src = ex[0]
-                    ex_tgt = ex[1] if len(ex) > 1 else ""
+                    ex_src = clean_html(ex[0])
+                    ex_tgt = clean_html(ex[1]) if len(ex) > 1 else ""
 
             cursor.execute("""
                 INSERT INTO definitions (word_id, definition, target_language,

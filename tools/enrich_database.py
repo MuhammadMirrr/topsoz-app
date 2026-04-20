@@ -23,6 +23,7 @@ from collections import defaultdict
 sys.path.insert(0, os.path.dirname(__file__))
 from transliterate import latin_to_cyrillic, is_cyrillic
 from search_index import DB_VERSION, rebuild_search_index
+from build_database import clean_html
 
 PROJECT_DIR = os.path.join(os.path.dirname(__file__), "..")
 RAW_DIR = os.path.join(PROJECT_DIR, "raw_data")
@@ -289,7 +290,13 @@ def load_openrussian():
 
 def add_definition(cursor, word_id, definition, target_language, source_tag="",
                    example_source="", example_target="", sort_order=0):
-    """Yangi ta'rif qo'shish (dublikat tekshirish bilan)."""
+    """Yangi ta'rif qo'shish (HTML tozalab, dublikat tekshirish bilan)."""
+    definition = clean_html(definition)
+    if not definition:
+        return False
+    example_source = clean_html(example_source)
+    example_target = clean_html(example_target)
+
     cursor.execute("""
         SELECT id FROM definitions
         WHERE word_id = ? AND definition = ? AND target_language = ?

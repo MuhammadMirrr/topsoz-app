@@ -98,7 +98,7 @@ class WordRepository {
               word: canonical.candidate.word,
               wordCyrillic: canonical.candidate.wordCyrillic,
               partOfSpeech: canonical.candidate.partOfSpeech,
-              firstDefinition: canonical.previewDefinition,
+              firstDefinition: stripHtml(canonical.previewDefinition),
               isFavorite: canonical.candidate.isFavorite,
               matchKind: canonical.matchKind,
               score: canonical.score,
@@ -106,6 +106,15 @@ class WordRepository {
               matchedTargetLanguage: canonical.matchedTargetLanguage,
             );
           }).toList()..sort((a, b) {
+            // Tanlangan tilda ta'rif bor natijalar yuqoriga chiqadi
+            if (targetLanguage != null) {
+              final aHas = candidatesById[a.wordId]
+                  ?.hasDefinitionInLanguage(targetLanguage) ?? false;
+              final bHas = candidatesById[b.wordId]
+                  ?.hasDefinitionInLanguage(targetLanguage) ?? false;
+              if (aHas != bHas) return bHas ? 1 : -1;
+            }
+
             final scoreOrder = b.score.compareTo(a.score);
             if (scoreOrder != 0) return scoreOrder;
 
@@ -125,6 +134,24 @@ class WordRepository {
           });
 
       final limitedResults = results.take(limit).toList(growable: false);
+
+      // Tanlangan til rejimida Kiril kirish bilan bo'sh natija bo'lsa,
+      // foydalanuvchi ehtimol o'zbek kirillida yozgan — avtomatik Lotinga
+      // o'tkazib qayta qidiramiz (misol: "олтин" → "oltin").
+      if (limitedResults.isEmpty &&
+          targetLanguage != null &&
+          UzbekTransliterator.isCyrillic(query)) {
+        final latinQuery = UzbekTransliterator.toLatin(query);
+        if (latinQuery.isNotEmpty && latinQuery != query) {
+          final fallbackResults = await search(
+            latinQuery,
+            limit: limit,
+            targetLanguage: null,
+          );
+          if (fallbackResults.isNotEmpty) return fallbackResults;
+        }
+      }
+
       if (limitedResults.isEmpty && plan.tokens.length > 1) {
         return _searchByTokenFallback(
           plan,
@@ -333,13 +360,6 @@ class WordRepository {
     final normalizedWord = _normalizeSearchText(candidate.word);
     final normalizedCyrillic = _normalizeSearchText(candidate.wordCyrillic);
     final foldedWord = _foldHeadword(candidate.word);
-    final previewDefinition = candidate.preferredDefinition(
-      targetLanguage: targetLanguage,
-    );
-
-    if (targetLanguage != null && previewDefinition.isEmpty) {
-      return null;
-    }
 
     SearchMatchKind? matchKind;
     String? matchedTargetLanguage;
@@ -663,7 +683,11 @@ class WordRepository {
     return normalized;
   }
 
-  /// So'z tafsilotini olish
+  /// So'z tafsilotini olish.
+  ///
+  /// Bir xil so'zning turli manbalardan kelgan variantlari (POS bo'yicha mos
+  /// keluvchi) avtomatik birlashtiriladi — barcha ta'riflar bitta ro'yxatda,
+  /// har biriga manba belgisi bilan ko'rsatiladi.
   Future<Word?> getWord(int id) async {
     final rows = await db.rawQuery(
       '''
@@ -679,34 +703,29 @@ class WordRepository {
     if (rows.isEmpty) return null;
 
     final word = Word.fromMap(rows.first);
+    final targetPosBucket = _normalizePosBucket(word.partOfSpeech);
 
+    // Asosiy so'zning ta'riflari (manba belgisi asosiy so'z manbasidan)
     final defRows = await db.query(
       'definitions',
       where: 'word_id = ?',
       whereArgs: [id],
       orderBy: 'sort_order ASC',
     );
+    final primaryDefinitions = defRows
+        .map(
+          (row) =>
+              Definition.fromMap(row).copyWith(source: word.source),
+        )
+        .toList(growable: false);
 
+    // Bir xil so'zning boshqa manbalaridagi variantlari (POS mos bo'lsa)
     final siblingRows = await db.rawQuery(
       '''
       SELECT
-        w.id,
-        COALESCE(w.source, '') AS source,
-        COALESCE(w.part_of_speech, '') AS part_of_speech,
-        COALESCE((
-          SELECT d.definition
-          FROM definitions d
-          WHERE d.word_id = w.id
-          ORDER BY
-            CASE d.target_language
-              WHEN 'en' THEN 0
-              WHEN 'ru' THEN 1
-              WHEN 'uz' THEN 2
-              ELSE 3
-            END,
-            d.sort_order
-          LIMIT 1
-        ), '') AS first_definition
+        w.id AS word_id,
+        COALESCE(w.source, '') AS word_source,
+        COALESCE(w.part_of_speech, '') AS part_of_speech
       FROM words w
       WHERE LOWER(w.word) = LOWER(?) AND w.id != ?
       ORDER BY w.source, w.part_of_speech, w.id
@@ -714,27 +733,104 @@ class WordRepository {
       [word.word, word.id],
     );
 
-    final relatedEntries = siblingRows
-        .map(
-          (row) => RelatedWordEntry(
-            id: row['id'] as int,
-            source: row['source'] as String? ?? '',
-            partOfSpeech: row['part_of_speech'] as String? ?? '',
-            firstDefinition: row['first_definition'] as String? ?? '',
-          ),
-        )
-        .where(
-          (entry) =>
-              _normalizePosBucket(entry.partOfSpeech) ==
-              _normalizePosBucket(word.partOfSpeech),
-        )
-        .toList(growable: false);
+    final matchingSiblingIds = <int, String>{};
+    for (final row in siblingRows) {
+      final pos = row['part_of_speech'] as String? ?? '';
+      if (_normalizePosBucket(pos) != targetPosBucket) continue;
+      matchingSiblingIds[row['word_id'] as int] =
+          (row['word_source'] as String?) ?? '';
+    }
 
-    final definitions = defRows.map((r) => Definition.fromMap(r)).toList();
-    return word.copyWith(
-      definitions: definitions,
-      relatedEntries: relatedEntries,
-    );
+    // Sibling ta'riflarini olish (manba belgisi bilan)
+    final siblingDefinitions = <Definition>[];
+    if (matchingSiblingIds.isNotEmpty) {
+      final ids = matchingSiblingIds.keys.toList();
+      final placeholders = List.filled(ids.length, '?').join(',');
+      final siblingDefRows = await db.rawQuery(
+        '''
+        SELECT *
+        FROM definitions
+        WHERE word_id IN ($placeholders)
+        ORDER BY word_id, sort_order ASC
+        ''',
+        ids,
+      );
+      for (final row in siblingDefRows) {
+        final wordId = row['word_id'] as int;
+        final sourceName = matchingSiblingIds[wordId] ?? '';
+        siblingDefinitions.add(
+          Definition.fromMap(row).copyWith(source: sourceName),
+        );
+      }
+    }
+
+    // Birlashtirish va dublikatlarni olib tashlash
+    final mergedDefinitions = _mergeDefinitions([
+      ...primaryDefinitions,
+      ...siblingDefinitions,
+    ]);
+
+    return word.copyWith(definitions: mergedDefinitions);
+  }
+
+  /// Ta'riflarni manba bo'yicha birlashtiradi va dublikatlarni olib tashlaydi.
+  ///
+  /// Tartib:
+  /// 1. Til bo'yicha (en → ru → uz → boshqa)
+  /// 2. Manba prioriteti bo'yicha (kaikki, uzwordnet va h.k.)
+  /// 3. sort_order bo'yicha
+  ///
+  /// Dublikatlar (case-insensitive bir xil ta'rif, bir tilda) birinchi
+  /// ko'rilganicha qoldiriladi, lekin manba belgilari "kaikki, vuizur"
+  /// kabi birlashtiriladi.
+  List<Definition> _mergeDefinitions(List<Definition> all) {
+    const langOrder = {'en': 0, 'ru': 1, 'uz': 2};
+
+    final byKey = <String, _MergedDefinition>{};
+    for (final def in all) {
+      final normalized = _normalizeSearchText(def.definition);
+      if (normalized.isEmpty) continue;
+
+      final key = '${def.targetLanguage}::$normalized';
+      final existing = byKey[key];
+      if (existing == null) {
+        byKey[key] = _MergedDefinition(
+          definition: def,
+          sources: {if (def.source.isNotEmpty) def.source},
+        );
+      } else if (def.source.isNotEmpty) {
+        existing.sources.add(def.source);
+      }
+    }
+
+    final merged = byKey.values.map((m) {
+      final combinedSource = m.sources.isEmpty
+          ? m.definition.source
+          : (m.sources.toList()
+                ..sort(
+                  (a, b) =>
+                      _sourcePriorityValue(a).compareTo(_sourcePriorityValue(b)),
+                ))
+              .join(', ');
+      return m.definition.copyWith(source: combinedSource);
+    }).toList();
+
+    merged.sort((a, b) {
+      final aLang = langOrder[a.targetLanguage] ?? 3;
+      final bLang = langOrder[b.targetLanguage] ?? 3;
+      if (aLang != bLang) return aLang.compareTo(bLang);
+
+      final aFirstSource = a.source.split(',').first.trim();
+      final bFirstSource = b.source.split(',').first.trim();
+      final sourceOrder = _sourcePriorityValue(
+        aFirstSource,
+      ).compareTo(_sourcePriorityValue(bFirstSource));
+      if (sourceOrder != 0) return sourceOrder;
+
+      return a.sortOrder.compareTo(b.sortOrder);
+    });
+
+    return merged;
   }
 
   /// Tasodifiy so'z (kun so'zi)
@@ -1026,8 +1122,12 @@ class _SearchCandidate {
     required String? targetLanguage,
     String? matchedTargetLanguage,
   }) {
-    if (targetLanguage == 'en') return firstDefinitionEn;
-    if (targetLanguage == 'ru') return firstDefinitionRu;
+    if (targetLanguage == 'en' && firstDefinitionEn.isNotEmpty) {
+      return firstDefinitionEn;
+    }
+    if (targetLanguage == 'ru' && firstDefinitionRu.isNotEmpty) {
+      return firstDefinitionRu;
+    }
     if (matchedTargetLanguage == 'en' && firstDefinitionEn.isNotEmpty) {
       return firstDefinitionEn;
     }
@@ -1037,6 +1137,15 @@ class _SearchCandidate {
     if (firstDefinitionAny.isNotEmpty) return firstDefinitionAny;
     if (firstDefinitionEn.isNotEmpty) return firstDefinitionEn;
     return firstDefinitionRu;
+  }
+
+  /// Tanlangan tilda ta'rif mavjudmi (saralash uchun).
+  bool hasDefinitionInLanguage(String language) {
+    return switch (language) {
+      'en' => firstDefinitionEn.isNotEmpty,
+      'ru' => firstDefinitionRu.isNotEmpty,
+      _ => firstDefinitionAny.isNotEmpty,
+    };
   }
 }
 
@@ -1061,4 +1170,11 @@ class _FallbackResult {
   int matchCount;
 
   _FallbackResult({required this.result, required this.matchCount});
+}
+
+class _MergedDefinition {
+  final Definition definition;
+  final Set<String> sources;
+
+  _MergedDefinition({required this.definition, required this.sources});
 }
