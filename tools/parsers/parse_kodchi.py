@@ -13,11 +13,17 @@ def parse_kodchi():
         print("[KODCHI] Papka topilmadi:", base_dir)
         return []
 
-    # Fayllarni qidirish
+    # Fayllarni qidirish.
+    # MUHIM: README.md kabi hujjat fayllari so'z ro'yxati EMAS — ularni
+    # o'qish "Ўзбекча сўзлар рўйхати" kabi sarlavha satrlarini so'z sifatida
+    # bazaga qo'shib yuboradi. Asl so'z ro'yxatlari .txt fayllarda
+    # (ё.txt, ў.txt ...), shuning uchun .md ni o'qimaymiz.
     words = set()
     for root, dirs, files in os.walk(base_dir):
+        # .git kabi xizmat papkalarini o'tkazib yuborish
+        dirs[:] = [d for d in dirs if d != ".git"]
         for fname in files:
-            if fname.endswith((".txt", ".json", ".csv", ".md")):
+            if fname.endswith((".txt", ".json", ".csv")):
                 fpath = os.path.join(root, fname)
                 try:
                     with open(fpath, "r", encoding="utf-8") as f:

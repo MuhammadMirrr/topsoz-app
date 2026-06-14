@@ -7,7 +7,8 @@
 /// build-time da (tools/build_database.py) amalga oshiriladi.
 String stripHtml(String text) {
   if (text.isEmpty) return text;
-  if (!text.contains('<') && !text.contains('&')) return text;
+  // HTML/entity yo'q bo'lsa ham bosh/oxirgi bo'shliqni tozalaymiz.
+  if (!text.contains('<') && !text.contains('&')) return text.trim();
 
   var result = text;
 
@@ -171,4 +172,3 @@ class Definition {
     );
   }
 }
-

@@ -11,7 +11,7 @@ class DatabaseHelper {
   DatabaseHelper._();
 
   static const _databaseVersion = 2;
-  static const _bundledDatabaseVersion = '2.0.0';
+  static const _bundledDatabaseVersion = '2.0.1';
 
   Database? _database;
 
@@ -187,8 +187,29 @@ class DatabaseHelper {
       limit: 1,
     );
 
-    if (rows.isEmpty) return null;
-    return rows.first['id'] as int;
+    if (rows.isNotEmpty) return rows.first['id'] as int;
+
+    // Migratsiya fallback: 2.0.1 da Kirill headword'lar Lotinga o'tkazildi
+    // (masalan kodchi "олтин" → "oltin") va asl Kirill `word_cyrillic` ga
+    // ko'chirildi. Shuning uchun eski imzodagi (Kirill) `word` yangi bazada
+    // `word_cyrillic` da bo'lishi mumkin — uni ham tekshiramiz, aks holda
+    // kodchi sevimlilari/tarixi jimgina yo'qoladi.
+    final cyrillicRows = await db.query(
+      'words',
+      columns: const ['id'],
+      where:
+          'word_cyrillic = ? AND language = ? AND part_of_speech = ? AND source = ?',
+      whereArgs: [
+        signature.word,
+        signature.language,
+        signature.partOfSpeech,
+        signature.source,
+      ],
+      limit: 1,
+    );
+
+    if (cyrillicRows.isNotEmpty) return cyrillicRows.first['id'] as int;
+    return null;
   }
 
   Future<void> close() async {

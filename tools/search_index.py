@@ -3,7 +3,7 @@ Qidiruv indeksini qurish uchun umumiy yordamchilar.
 """
 import re
 
-DB_VERSION = "2.0.0"
+DB_VERSION = "2.0.1"
 
 _APOSTROPHE_RE = re.compile(r"[\u02BB\u02BC`\u2018\u2019\u2032]")
 _WHITESPACE_RE = re.compile(r"\s+")

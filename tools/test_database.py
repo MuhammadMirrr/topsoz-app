@@ -664,20 +664,43 @@ def test_7_edge_cases(conn):
          found_apo >= len(apostrophe_words) * 0.7,
          f"Topilmadi: {missing_apo}")
 
-    # Unicode harflar
-    c.execute("SELECT COUNT(*) FROM words WHERE word LIKE '%\u045e%'")
+    # Unicode harflar \u2014 Kirill maxsus harflar `word_cyrillic` ustunida
+    # bo'lishi kerak (`word` ustuni Lotin, normalize_cyrillic_headwords dan keyin).
+    c.execute("SELECT COUNT(*) FROM words WHERE word_cyrillic LIKE '%\u045e%'")
     o_stroke = c.fetchone()[0]
-    c.execute("SELECT COUNT(*) FROM words WHERE word LIKE '%\u0493%'")
+    c.execute("SELECT COUNT(*) FROM words WHERE word_cyrillic LIKE '%\u0493%'")
     g_stroke = c.fetchone()[0]
-    c.execute("SELECT COUNT(*) FROM words WHERE word LIKE '%\u049b%'")
+    c.execute("SELECT COUNT(*) FROM words WHERE word_cyrillic LIKE '%\u049b%'")
     q_stroke = c.fetchone()[0]
-    c.execute("SELECT COUNT(*) FROM words WHERE word LIKE '%\u04b3%'")
+    c.execute("SELECT COUNT(*) FROM words WHERE word_cyrillic LIKE '%\u04b3%'")
     h_stroke = c.fetchone()[0]
 
     test(f"Unicode \u045e (o' kirill) so'zlar: {o_stroke}", o_stroke > 0)
     test(f"Unicode \u0493 (g' kirill) so'zlar: {g_stroke}", g_stroke > 0)
     test(f"Unicode \u049b (q kirill) so'zlar: {q_stroke}", q_stroke > 0)
     test(f"Unicode \u04b3 (h kirill) so'zlar: {h_stroke}", h_stroke > 0)
+
+    # Post-process invariantlari (db_postprocess.canonicalize_headwords + prune):
+    # Lotin `word` ustunida Kirill QOLMASLIGI kerak (hammasi word_cyrillic ga
+    # ko'chiriladi) \u2014 bu qidiruvdagi "oltin" vs "\u043e\u043b\u0442\u0438\u043d" dublikatini oldini oladi.
+    c.execute("SELECT COUNT(*) FROM words WHERE word GLOB '*[\u0400-\u04ff]*'")
+    cyr_in_word = c.fetchone()[0]
+    test("Lotin `word` ustunida Kirill yo'q (canonicalize)", cyr_in_word == 0,
+         f"{cyr_in_word} ta Kirill `word` topildi")
+
+    # Ko'p so'zli headword'da ortiqcha (qo'sh) bo'shliq qolmasligi kerak \u2014
+    # aks holda getWord sibling-merge buziladi (SQL/Dart bo'shliq parity).
+    c.execute("SELECT COUNT(*) FROM words WHERE word LIKE '%  %'")
+    double_space = c.fetchone()[0]
+    test("Headword'da qo'sh bo'shliq yo'q (canonicalize)", double_space == 0,
+         f"{double_space} ta qo'sh-bo'shliqli so'z topildi")
+
+    # Ta'rifsiz (o'lik) so'z qolmasligi kerak (prune_definitionless_words).
+    c.execute("""SELECT COUNT(*) FROM words w
+                 WHERE NOT EXISTS (SELECT 1 FROM definitions d WHERE d.word_id = w.id)""")
+    defless = c.fetchone()[0]
+    test("Ta'rifsiz so'zlar yo'q (prune)", defless == 0,
+         f"{defless} ta ta'rifsiz so'z topildi")
 
     # Tab, newline, maxsus belgilar so'z ichida
     c.execute(r"SELECT COUNT(*) FROM words WHERE word LIKE '%\t%' OR word LIKE '%\n%' OR word LIKE '%\r%'")

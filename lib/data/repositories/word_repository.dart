@@ -108,10 +108,16 @@ class WordRepository {
           }).toList()..sort((a, b) {
             // Tanlangan tilda ta'rif bor natijalar yuqoriga chiqadi
             if (targetLanguage != null) {
-              final aHas = candidatesById[a.wordId]
-                  ?.hasDefinitionInLanguage(targetLanguage) ?? false;
-              final bHas = candidatesById[b.wordId]
-                  ?.hasDefinitionInLanguage(targetLanguage) ?? false;
+              final aHas =
+                  candidatesById[a.wordId]?.hasDefinitionInLanguage(
+                    targetLanguage,
+                  ) ??
+                  false;
+              final bHas =
+                  candidatesById[b.wordId]?.hasDefinitionInLanguage(
+                    targetLanguage,
+                  ) ??
+                  false;
               if (aHas != bHas) return bHas ? 1 : -1;
             }
 
@@ -629,23 +635,30 @@ class WordRepository {
   }
 
   static String _normalizedWordSql(String column) {
+    // Dart _apostrophePattern bilan bir xil to'plamni normallashtiradi:
+    // U+02BB(699), U+02BC(700), U+0060(96)`, U+2018(8216), U+2019(8217),
+    // U+2032(8242)′ → barchasi U+0027 (') ga.
     return """
       LOWER(
         REPLACE(
           REPLACE(
             REPLACE(
               REPLACE(
-                REPLACE(COALESCE($column, ''), CHAR(699), ''''),
-                CHAR(700),
+                REPLACE(
+                  REPLACE(COALESCE($column, ''), CHAR(699), ''''),
+                  CHAR(700),
+                  ''''
+                ),
+                CHAR(96),
                 ''''
               ),
-              CHAR(96),
+              CHAR(8216),
               ''''
             ),
-            CHAR(8216),
+            CHAR(8217),
             ''''
           ),
-          CHAR(8217),
+          CHAR(8242),
           ''''
         )
       )
@@ -713,13 +726,16 @@ class WordRepository {
       orderBy: 'sort_order ASC',
     );
     final primaryDefinitions = defRows
-        .map(
-          (row) =>
-              Definition.fromMap(row).copyWith(source: word.source),
-        )
+        .map((row) => Definition.fromMap(row).copyWith(source: word.source))
         .toList(growable: false);
 
-    // Bir xil so'zning boshqa manbalaridagi variantlari (POS mos bo'lsa)
+    // Bir xil so'zning boshqa manbalaridagi variantlari (POS mos bo'lsa).
+    //
+    // Muhim: manbalar so'zni turli apostrof belgisi bilan saqlaydi
+    // (U+0027, U+2019, U+02BB, U+2018 ...). Oddiy `LOWER(word)=LOWER(?)`
+    // bu variantlarni boshqa-boshqa deb biladi va ta'riflarni
+    // birlashtirmaydi. Shuning uchun apostrof-normallashtirilgan
+    // taqqoslash ishlatamiz (qidiruvdagi dedup bilan bir xil mantiq).
     final siblingRows = await db.rawQuery(
       '''
       SELECT
@@ -727,10 +743,10 @@ class WordRepository {
         COALESCE(w.source, '') AS word_source,
         COALESCE(w.part_of_speech, '') AS part_of_speech
       FROM words w
-      WHERE LOWER(w.word) = LOWER(?) AND w.id != ?
+      WHERE ${_normalizedWordSql('w.word')} = ? AND w.id != ?
       ORDER BY w.source, w.part_of_speech, w.id
     ''',
-      [word.word, word.id],
+      [_normalizeSearchText(word.word), word.id],
     );
 
     final matchingSiblingIds = <int, String>{};
@@ -746,15 +762,12 @@ class WordRepository {
     if (matchingSiblingIds.isNotEmpty) {
       final ids = matchingSiblingIds.keys.toList();
       final placeholders = List.filled(ids.length, '?').join(',');
-      final siblingDefRows = await db.rawQuery(
-        '''
+      final siblingDefRows = await db.rawQuery('''
         SELECT *
         FROM definitions
         WHERE word_id IN ($placeholders)
         ORDER BY word_id, sort_order ASC
-        ''',
-        ids,
-      );
+        ''', ids);
       for (final row in siblingDefRows) {
         final wordId = row['word_id'] as int;
         final sourceName = matchingSiblingIds[wordId] ?? '';
@@ -806,12 +819,12 @@ class WordRepository {
     final merged = byKey.values.map((m) {
       final combinedSource = m.sources.isEmpty
           ? m.definition.source
-          : (m.sources.toList()
-                ..sort(
-                  (a, b) =>
-                      _sourcePriorityValue(a).compareTo(_sourcePriorityValue(b)),
+          : (m.sources.toList()..sort(
+                  (a, b) => _sourcePriorityValue(
+                    a,
+                  ).compareTo(_sourcePriorityValue(b)),
                 ))
-              .join(', ');
+                .join(', ');
       return m.definition.copyWith(source: combinedSource);
     }).toList();
 
@@ -893,8 +906,17 @@ class _SearchPlan {
 
   bool get isValid => normalizedQuery.isNotEmpty && tokens.isNotEmpty;
 
+  // 3 harfli so'zlar ta'rif bo'yicha qidirilishi kerak: inglizcha→o'zbek
+  // lug'atda "car", "cat", "sun", "dog" kabi keng tarqalgan qisqa so'zlar
+  // shu yerga tushadi. 1-2 harf hali ham shovqinni oldini olish uchun
+  // ta'rif qidiruvidan chiqarib tashlanadi.
+  //
+  // Uzunlikni APOSTROFSIZ (folded) shaklda o'lchaymiz: "o'z"/"o'r" aslida
+  // 2 harf — agar apostrofni sanasak, ular 3 belgilik bo'lib noto'g'ri
+  // ta'rif qidiruviga tushib, "or"* kabi minglab shovqinli mosliklarni
+  // keltirib chiqaradi.
   bool get allowDefinitionMatches =>
-      tokens.any((token) => token.original.length > 3);
+      tokens.any((token) => token.original.replaceAll("'", '').length > 2);
 
   List<String> get transliteratedForms => tokens.length == 1
       ? tokens.first.headwordVariants

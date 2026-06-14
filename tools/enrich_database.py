@@ -24,6 +24,7 @@ sys.path.insert(0, os.path.dirname(__file__))
 from transliterate import latin_to_cyrillic, is_cyrillic
 from search_index import DB_VERSION, rebuild_search_index
 from build_database import clean_html
+from db_postprocess import canonicalize_headwords, prune_definitionless_words
 
 PROJECT_DIR = os.path.join(os.path.dirname(__file__), "..")
 RAW_DIR = os.path.join(PROJECT_DIR, "raw_data")
@@ -615,6 +616,17 @@ def enrich():
           f"{len(kodchi_enriched_set)} so'z boyitildi")
 
     # ═══════════════════════════════════════════
+    # QADAM 6: Kirill->Lotin headword + ta'rifsiz so'zlarni tozalash
+    # ═══════════════════════════════════════════
+    print(f"\n{'─'*60}")
+    print("[6/6] Headword kanonikalashtirish va ta'rifsiz so'zlarni tozalash...")
+    # Avval `word` ni kanonik shaklga keltiramiz (Kirill->Lotin + bo'shliq
+    # siqish — qidiruvdagi dublikatlarni oldini olish), so'ng ta'rifsiz o'lik
+    # so'zlarni o'chiramiz.
+    canonicalize_headwords(conn)
+    prune_definitionless_words(conn)
+
+    # ═══════════════════════════════════════════
     # FTS5 QAYTA QURISH
     # ═══════════════════════════════════════════
     print(f"\n{'─'*60}")
@@ -633,11 +645,15 @@ def enrich():
     import datetime
     cursor.execute("SELECT COUNT(*) FROM definitions")
     total_defs = cursor.fetchone()[0]
+    cursor.execute("SELECT COUNT(*) FROM words")
+    total_words_meta = cursor.fetchone()[0]
     conn.execute("INSERT OR REPLACE INTO meta VALUES ('enriched_at', ?)",
                  (datetime.datetime.now().isoformat(),))
     conn.execute("INSERT OR REPLACE INTO meta VALUES ('version', ?)", (DB_VERSION,))
     conn.execute("INSERT OR REPLACE INTO meta VALUES ('definition_count', ?)",
                  (str(total_defs),))
+    conn.execute("INSERT OR REPLACE INTO meta VALUES ('word_count', ?)",
+                 (str(total_words_meta),))
     conn.commit()
 
     # ═══════════════════════════════════════════

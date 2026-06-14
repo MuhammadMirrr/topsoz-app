@@ -84,6 +84,57 @@ void main() {
       expect(results.first.word, 'ot');
       expect(results.first.matchKind, SearchMatchKind.exactTransliteration);
     });
+
+    test(
+      'getWord turli apostrof variantli siblinglarni birlashtiradi',
+      () async {
+        // id=15 "bo'sh" (U+0027, herve) tafsilotini ochamiz; id=16 "boʻsh"
+        // (U+02BB, kaikki) sibling ta'rifi ham birlashishi kerak.
+        final word = await repository.getWord(15);
+
+        expect(word, isNotNull);
+        final defs = word!.definitions
+            .map((d) => d.definition.toLowerCase())
+            .toList();
+        expect(defs, contains('empty'), reason: 'asosiy ta\'rif');
+        expect(
+          defs,
+          contains('vacant'),
+          reason: 'U+02BB apostrofli sibling birlashmadi',
+        );
+      },
+    );
+
+    test('3 harfli inglizcha so\'z ta\'rif orqali topiladi', () async {
+      // "cat" 3 harf — eski xulqda ta'rif qidiruvi o'chiq edi (len>3).
+      final results = await repository.search('cat', targetLanguage: 'en');
+
+      expect(results, isNotEmpty);
+      expect(results.any((r) => r.word == 'mushuk'), isTrue);
+    });
+
+    test('3 harfli query ta\'rif PREFIKSi orqali ham topadi (car→carriage)', () {
+      // definitionToken (prefix) yo'li: "carriage" "car"* ga mos keladi.
+      return repository.search('car', targetLanguage: 'en').then((results) {
+        expect(results.any((r) => r.word == 'ulov'), isTrue);
+      });
+    });
+
+    test(
+      "2 harfli apostrofli so'z (o'r) ta'rif shovqinini keltirmaydi",
+      () async {
+        // folded "or" 2 harf → allowDefinitionMatches false. "buyruq" faqat
+        // ta'rifi ("order") orqali mos kelardi — endi natijada bo'lmasligi kerak.
+        final results = await repository.search("o'r");
+
+        expect(results.any((r) => r.word == "o'r"), isTrue, reason: 'headword');
+        expect(
+          results.any((r) => r.word == 'buyruq'),
+          isFalse,
+          reason: "2-harfli so'z ta'rif qidiruviga tushmasligi kerak",
+        );
+      },
+    );
   });
 
   group('WordRepository.search real database', () {
@@ -124,12 +175,13 @@ void main() {
     });
 
     test(
-      'book + ru filter — ruscha ta\'rif yo\'q bo\'lsa ham inglizcha fallback ko\'rsatadi',
+      'book + ru filter — qat\'iy til filtri: ruscha mos yo\'q bo\'lsa bo\'sh qaytadi',
       () async {
+        // Til filtri qat'iy: "book" ruscha ta'rifda yo'q (faqat inglizcha
+        // ta'riflarda bor), shuning uchun ru rejimida natija bo'sh bo'ladi.
+        // Bu fixture guruhidagi bir xil so'rovning xulqiga mos.
         final results = await repository.search('book', targetLanguage: 'ru');
-        // Yangi xulq: ruscha ta'rif topilmasa ham, inglizcha yoki boshqa
-        // ta'rif fallback sifatida ko'rsatiladi (to'liq bo'sh emas).
-        expect(results, isNotEmpty);
+        expect(results, isEmpty);
       },
     );
 
@@ -155,18 +207,15 @@ void main() {
       },
     );
 
-    test(
-      'Ruscha rejim — ruscha ta\'rif bor so\'zlar tepada turadi',
-      () async {
-        // Biror so'z uchun Ruscha mode da qidirsak, agar ruscha ta'rif bo'lsa
-        // u oldinroq chiqishi kerak. Bu test baza holatiga bog'liq —
-        // faqat tartibning mantiqiyligini tekshiradi.
-        final results = await repository.search('ot', targetLanguage: 'ru');
-        if (results.length < 2) return;
-        // Tartib buzilgan bo'lmasligi kerak
-        expect(results.first.word, isNotEmpty);
-      },
-    );
+    test('Ruscha rejim — ruscha ta\'rif bor so\'zlar tepada turadi', () async {
+      // Biror so'z uchun Ruscha mode da qidirsak, agar ruscha ta'rif bo'lsa
+      // u oldinroq chiqishi kerak. Bu test baza holatiga bog'liq —
+      // faqat tartibning mantiqiyligini tekshiradi.
+      final results = await repository.search('ot', targetLanguage: 'ru');
+      if (results.length < 2) return;
+      // Tartib buzilgan bo'lmasligi kerak
+      expect(results.first.word, isNotEmpty);
+    });
 
     test('multi-token query blank qaytmaydi', () async {
       final results = await repository.search('kitob maktab');
@@ -250,6 +299,21 @@ Future<void> _seedFixtureData(Database db) async {
     _wordRow(12, 'maktab kitobi', 'noun', 'herve'),
     _wordRow(13, 'kitob', 'noun', 'herve'),
     _wordRow(14, 'maktab', 'noun', 'herve'),
+    // Bug 1 regress: bir xil so'z, TURLI apostrof belgisi, turli manba.
+    // "bo'sh" U+0027 (herve) va "boʻsh" U+02BB (kaikki) — getWord ularni
+    // birlashtirishi kerak (apostrof normallashtirilgan taqqoslash).
+    _wordRow(15, "bo'sh", 'adjective', 'herve'),
+    _wordRow(16, 'boʻsh', 'adjective', 'kaikki'),
+    // Bug 2 regress: 3 harfli inglizcha ta'rif orqali topiladigan so'z.
+    _wordRow(17, 'mushuk', 'noun', 'herve'),
+    // Review#2 regress: 2-harfli apostrofli so'z ("o'r") ta'rif qidiruviga
+    // TUSHMASLIGI kerak (folded "or" 2 harf). "buyruq" faqat ta'rifi ("order")
+    // orqali "or"* ga mos kelardi — endi mos kelmasligi kerak.
+    _wordRow(20, "o'r", 'verb', 'herve'),
+    _wordRow(21, 'buyruq', 'noun', 'herve'),
+    // Review#3 regress: 3 harfli query prefix (definitionToken) yo'li —
+    // "car" → "carriage" ta'rifiga prefix mos keladi.
+    _wordRow(22, 'ulov', 'noun', 'herve'),
   ];
 
   for (final row in words) {
@@ -271,6 +335,12 @@ Future<void> _seedFixtureData(Database db) async {
     _definitionRow(12, 12, 'school book', 'en', 0),
     _definitionRow(13, 13, 'book', 'en', 0),
     _definitionRow(14, 14, 'school', 'en', 0),
+    _definitionRow(15, 15, 'empty', 'en', 0),
+    _definitionRow(16, 16, 'vacant', 'en', 0),
+    _definitionRow(17, 17, 'cat', 'en', 0),
+    _definitionRow(20, 20, 'reap', 'en', 0),
+    _definitionRow(21, 21, 'order', 'en', 0),
+    _definitionRow(22, 22, 'carriage', 'en', 0),
   ];
 
   for (final row in definitions) {
