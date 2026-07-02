@@ -1,43 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../core/services/ad_service.dart';
 import '../../core/theme/app_colors.dart';
 import '../../data/database/providers.dart';
 
-class SettingsScreen extends ConsumerStatefulWidget {
+class SettingsScreen extends ConsumerWidget {
   const SettingsScreen({super.key});
 
   @override
-  ConsumerState<SettingsScreen> createState() => _SettingsScreenState();
-}
-
-class _SettingsScreenState extends ConsumerState<SettingsScreen> {
-  // Rewarded reklama holati
-  int _watchedCount = 0;
-  bool _isPremium = false;
-  DateTime? _premiumExpiresAt;
-
-  @override
-  void initState() {
-    super.initState();
-    _loadRewardedState();
-  }
-
-  Future<void> _loadRewardedState() async {
-    final count = await AdService.instance.getTodayRewardedCount();
-    final premium = await AdService.instance.isPremiumActive();
-    final expiresAt = await AdService.instance.getPremiumExpiresAt();
-    if (mounted) {
-      setState(() {
-        _watchedCount = count;
-        _isPremium = premium;
-        _premiumExpiresAt = expiresAt;
-      });
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final themeMode = ref.watch(themeModeProvider);
     final isDark = themeMode == ThemeMode.dark;
     final fontScale = ref.watch(fontScaleProvider);
@@ -154,10 +124,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               ),
               const SizedBox(height: 20),
 
-              // Reklamasiz rejim (Rewarded reklama)
-              _buildSupportSection(context),
-              const SizedBox(height: 20),
-
               // Ilova haqida
               _buildSection(
                 context,
@@ -208,7 +174,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                       Icons.chevron_right_rounded,
                       color: AppColors.textSecondary,
                     ),
-                    onTap: () => _showClearHistoryDialog(context),
+                    onTap: () => _showClearHistoryDialog(context, ref),
                   ),
                   ListTile(
                     leading: const Icon(
@@ -223,7 +189,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                       Icons.chevron_right_rounded,
                       color: AppColors.textSecondary,
                     ),
-                    onTap: () => _showClearFavoritesDialog(context),
+                    onTap: () => _showClearFavoritesDialog(context, ref),
                   ),
                 ],
               ),
@@ -269,7 +235,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   onPressed: () {
                     showAboutDialog(
                       context: context,
-                      applicationName: "Topso'z",
+                      applicationName: "Lug'atchi",
                       applicationVersion: "1.0.0",
                       applicationIcon: ClipRRect(
                         borderRadius: BorderRadius.circular(16),
@@ -281,7 +247,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                       ),
                       children: [
                         Text(
-                          "Topso'z — O'zbek-Ingliz-Rus offline lug'at ilovasi. "
+                          "Lug'atchi — O'zbek-Ingliz-Rus offline lug'at ilovasi. "
                           "${wordCount.valueOrNull != null ? _formatNumber(wordCount.valueOrNull!) : '71,000'} "
                           "dan ortiq so'z va "
                           "${definitionCount.valueOrNull != null ? _formatNumber(definitionCount.valueOrNull!) : '20,000'} "
@@ -307,268 +273,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       ),
     );
   }
-
-  // ============================================================
-  // Reklamasiz rejim bo'limi
-  // ============================================================
-
-  Widget _buildSupportSection(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          _isPremium ? "Premium faol" : "Reklamasiz rejim",
-          style: Theme.of(context).textTheme.titleMedium?.copyWith(
-            fontWeight: FontWeight.w600,
-          ),
-        ),
-        const SizedBox(height: 12),
-        Container(
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              colors: _isPremium
-                  ? [const Color(0xFF10B981), const Color(0xFF059669)]
-                  : [const Color(0xFF9685FF), const Color(0xFF7B6BEB)],
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-            ),
-            borderRadius: BorderRadius.circular(24),
-            boxShadow: [
-              BoxShadow(
-                color: (_isPremium ? AppColors.success : AppColors.primary)
-                    .withValues(alpha: 0.3),
-                blurRadius: 16,
-                offset: const Offset(0, 6),
-              ),
-            ],
-          ),
-          child: Padding(
-            padding: const EdgeInsets.all(20),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(10),
-                      decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: 0.2),
-                        borderRadius: BorderRadius.circular(14),
-                      ),
-                      child: Icon(
-                        _isPremium
-                            ? Icons.workspace_premium_rounded
-                            : Icons.play_circle_outline_rounded,
-                        color: Colors.white,
-                        size: 24,
-                      ),
-                    ),
-                    const SizedBox(width: 14),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            _isPremium
-                                ? "Reklamasiz rejim faol!"
-                                : "3 ta video = 24 soat reklamasiz",
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontWeight: FontWeight.w600,
-                              fontSize: 15,
-                            ),
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            _isPremium
-                                ? "Barcha reklamalar o'chirilgan"
-                                : "Qisqa videolarni ko'ring — butun kun tinch ishlating!",
-                            style: TextStyle(
-                              color: Colors.white.withValues(alpha: 0.8),
-                              fontSize: 13,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 16),
-
-                if (_isPremium && _premiumExpiresAt != null)
-                  _buildPremiumTimer(context, _premiumExpiresAt!)
-                else
-                  _buildRewardedProgress(context),
-              ],
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildPremiumTimer(BuildContext context, DateTime expiresAt) {
-    final remaining = expiresAt.difference(DateTime.now());
-    final hours = remaining.inHours;
-    final minutes = remaining.inMinutes % 60;
-
-    return Column(
-      children: [
-        Container(
-          width: double.infinity,
-          height: 6,
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(3),
-          ),
-        ),
-        const SizedBox(height: 10),
-        Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Icon(Icons.timer_rounded, color: Colors.white70, size: 16),
-            const SizedBox(width: 6),
-            Text(
-              "$hours soat $minutes daqiqa qoldi",
-              style: TextStyle(
-                color: Colors.white.withValues(alpha: 0.9),
-                fontSize: 13,
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 12),
-        Container(
-          width: double.infinity,
-          padding: const EdgeInsets.symmetric(vertical: 14),
-          decoration: BoxDecoration(
-            color: Colors.white.withValues(alpha: 0.2),
-            borderRadius: BorderRadius.circular(16),
-          ),
-          child: const Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(Icons.check_circle_rounded, color: Colors.white, size: 20),
-              SizedBox(width: 8),
-              Text(
-                "Barcha reklamalar o'chirilgan",
-                style: TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildRewardedProgress(BuildContext context) {
-    final remaining = AdService.maxDailyRewarded - _watchedCount;
-    final canWatch = remaining > 0;
-
-    return Column(
-      children: [
-        // Progress ko'rsatgich — har bir video uchun alohida chiziq
-        Row(
-          children: List.generate(AdService.maxDailyRewarded, (i) {
-            final isWatched = i < _watchedCount;
-            return Expanded(
-              child: Container(
-                margin: EdgeInsets.only(
-                  right: i < AdService.maxDailyRewarded - 1 ? 6 : 0,
-                ),
-                height: 6,
-                decoration: BoxDecoration(
-                  color: isWatched
-                      ? Colors.white
-                      : Colors.white.withValues(alpha: 0.25),
-                  borderRadius: BorderRadius.circular(3),
-                ),
-              ),
-            );
-          }),
-        ),
-        const SizedBox(height: 8),
-        Text(
-          "$_watchedCount / ${AdService.maxDailyRewarded} video ko'rildi",
-          style: TextStyle(
-            color: Colors.white.withValues(alpha: 0.7),
-            fontSize: 12,
-          ),
-        ),
-        const SizedBox(height: 14),
-        SizedBox(
-          width: double.infinity,
-          child: ElevatedButton.icon(
-            onPressed: canWatch ? _showRewardedAd : null,
-            icon: const Icon(Icons.play_circle_outline_rounded, size: 20),
-            label: Text(
-              canWatch
-                  ? "Video ko'rish ($remaining qoldi)"
-                  : "Bugun uchun tugadi",
-              style: const TextStyle(fontWeight: FontWeight.w600),
-            ),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.white,
-              foregroundColor: AppColors.primary,
-              disabledBackgroundColor: Colors.white.withValues(alpha: 0.2),
-              disabledForegroundColor: Colors.white.withValues(alpha: 0.7),
-              padding: const EdgeInsets.symmetric(vertical: 14),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(16),
-              ),
-              elevation: 0,
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-
-  void _showRewardedAd() async {
-    final messenger = ScaffoldMessenger.of(context);
-
-    final shown = await AdService.instance.showRewardedAd(
-      onUserEarnedReward: (ad, reward) {
-        // Callback — reward olinganda
-      },
-    );
-
-    if (!mounted) return;
-
-    if (shown) {
-      // Holatni qayta yuklash — UI darhol yangilanadi
-      await _loadRewardedState();
-
-      messenger.showSnackBar(
-        SnackBar(
-          content: Text(
-            _isPremium
-                ? "24 soatlik reklamasiz rejim faollashdi!"
-                : "Rahmat! Yana ${AdService.maxDailyRewarded - _watchedCount} ta video qoldi",
-          ),
-          behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-          backgroundColor: _isPremium ? AppColors.success : AppColors.primary,
-        ),
-      );
-    } else {
-      messenger.showSnackBar(
-        SnackBar(
-          content: const Text("Reklama hozircha tayyor emas. Keyinroq urinib ko'ring."),
-          behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        ),
-      );
-    }
-  }
-
-  // ============================================================
-  // Yordamchi widgetlar
-  // ============================================================
 
   Widget _buildSection(
     BuildContext context, {
@@ -653,7 +357,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     return buffer.toString();
   }
 
-  void _showClearHistoryDialog(BuildContext context) {
+  void _showClearHistoryDialog(BuildContext context, WidgetRef ref) {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -699,7 +403,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     );
   }
 
-  void _showClearFavoritesDialog(BuildContext context) {
+  void _showClearFavoritesDialog(BuildContext context, WidgetRef ref) {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(

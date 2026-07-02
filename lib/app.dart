@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'core/services/ad_service.dart';
 import 'core/theme/app_theme.dart';
 import 'data/database/providers.dart';
 import 'features/onboarding/onboarding_screen.dart';
@@ -11,8 +10,8 @@ import 'routing/app_router.dart';
 /// Splash screen holati
 final splashCompleteProvider = StateProvider<bool>((ref) => false);
 
-class TopsozApp extends ConsumerWidget {
-  const TopsozApp({super.key});
+class LugatchiApp extends ConsumerWidget {
+  const LugatchiApp({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -22,7 +21,7 @@ class TopsozApp extends ConsumerWidget {
     final onboardingDone = ref.watch(onboardingCompleteProvider);
 
     return MaterialApp.router(
-      title: "Topso'z",
+      title: "Lug'atchi",
       debugShowCheckedModeBanner: false,
       theme: AppTheme.light,
       darkTheme: AppTheme.dark,
@@ -43,8 +42,6 @@ class TopsozApp extends ConsumerWidget {
           return SplashScreen(
             onComplete: () {
               ref.read(splashCompleteProvider.notifier).state = true;
-              // Splash tugagandan keyin interstitial ko'rsatish (har 3-chi ochilishda)
-              AdService.instance.showInterstitialIfReady();
             },
           );
         }

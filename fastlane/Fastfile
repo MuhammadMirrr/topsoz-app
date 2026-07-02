@@ -1,0 +1,69 @@
+default_platform(:ios)
+
+platform :ios do
+  def lugatchi_api_key
+    app_store_connect_api_key(
+      key_id: "Y2V5385KN2",
+      issuer_id: "b69effec-1aef-4317-953f-13c4bb806061",
+      key_filepath: File.expand_path("~/.appstoreconnect/private_keys/AuthKey_Y2V5385KN2.p8"),
+      duration: 1200,
+      in_house: false
+    )
+  end
+
+  desc "App Store Connect da Lug'atchi app yozuvini yaratish (FASTLANE_PASSWORD kerak) — odatda kerak emas, app allaqachon mavjud"
+  lane :create_app do
+    produce(
+      app_identifier: "com.uzbapps.avom",
+      app_name: "Lug'atchi",
+      sku: "com.uzbapps.avom",
+      team_id: "PDNFP37X39",
+      language: "en-US",
+      skip_devcenter: true
+    )
+  end
+
+  desc "Lug'atchi IPA ni App Store Connect ga yuklash"
+  lane :upload do
+    upload_to_app_store(
+      api_key: lugatchi_api_key,
+      ipa: "build/ios/ipa/Lug'atchi.ipa",
+      skip_metadata: true,
+      skip_screenshots: true,
+      submit_for_review: false,
+      precheck_include_in_app_purchases: false
+    )
+  end
+
+  desc "App mavjud bo'lsa IPA yuklash; yo'q bo'lsa create_app + upload"
+  lane :release do
+    upload
+  rescue => e
+    UI.important("Upload xato: #{e.message}")
+    UI.important("Avval App Store Connect da app yozuvi kerak (fastlane create_app).")
+    raise e
+  end
+
+  desc "Diagnostika: shu hisobdagi barcha app yozuvlarini ko'rsatish (o'qish uchun, hech narsa o'zgartirmaydi)"
+  lane :list_apps do
+    lugatchi_api_key
+    apps = Spaceship::ConnectAPI::App.all
+    apps.each do |a|
+      UI.message("#{a.name} | bundleId=#{a.bundleId} | id=#{a.id} | sku=#{a.sku}")
+    end
+  end
+
+  desc "Faqat matn metadata'ni yuklash (tavsif, kalit so'z, copyright va h.k.) — binary/screenshotga tegmaydi"
+  lane :metadata do
+    upload_to_app_store(
+      api_key: lugatchi_api_key,
+      app_identifier: "com.uzbapps.avom",
+      skip_binary_upload: true,
+      skip_screenshots: true,
+      skip_metadata: false,
+      submit_for_review: false,
+      force: true,
+      precheck_include_in_app_purchases: false
+    )
+  end
+end

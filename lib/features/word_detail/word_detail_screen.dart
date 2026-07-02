@@ -3,7 +3,6 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:share_plus/share_plus.dart';
 import '../../core/theme/app_colors.dart';
-import '../../core/widgets/banner_ad_widget.dart';
 import '../../core/widgets/shimmer_loading.dart';
 import '../../data/database/providers.dart';
 import '../../data/models/word.dart';
@@ -92,7 +91,7 @@ class WordDetailScreen extends ConsumerWidget {
                 final defs = word.definitions
                     .map((d) => d.definition)
                     .join(', ');
-                Share.share('${word.word} — $defs\n\nTopso\'z lug\'atidan');
+                Share.share("${word.word} — $defs\n\nLug'atchi lug'atidan");
               },
             ),
             IconButton(
@@ -230,14 +229,6 @@ class WordDetailScreen extends ConsumerWidget {
               ),
             ),
           ),
-
-        // Banner reklama
-        const SliverToBoxAdapter(
-          child: Padding(
-            padding: EdgeInsets.fromLTRB(24, 8, 24, 16),
-            child: Center(child: BannerAdWidget()),
-          ),
-        ),
 
         // Bo'sh joy
         const SliverToBoxAdapter(child: SizedBox(height: 24)),

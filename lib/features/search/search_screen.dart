@@ -4,8 +4,6 @@ import 'package:go_router/go_router.dart';
 
 import '../../core/theme/app_colors.dart';
 import '../../core/utils/debouncer.dart';
-import '../../core/widgets/banner_ad_widget.dart';
-import '../../core/widgets/native_ad_widget.dart';
 import '../../core/widgets/shimmer_loading.dart';
 import '../../data/database/providers.dart';
 import '../../data/models/search_result.dart';
@@ -84,7 +82,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
               child: Row(
                 children: [
                   Text(
-                    "Topso'z",
+                    "Lug'atchi",
                     style: Theme.of(context).textTheme.headlineMedium?.copyWith(
                       fontWeight: FontWeight.w700,
                     ),
@@ -195,7 +193,6 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                   ? const ShimmerList()
                   : _buildSearchResults(results),
             ),
-            const BannerAdWidget(),
           ],
         ),
       ),
@@ -422,30 +419,12 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
           );
         }
 
-        const nativeAdInterval = 10;
-        final nativeAdCount = items.length >= nativeAdInterval
-            ? (items.length ~/ nativeAdInterval)
-            : 0;
-        final totalCount = items.length + nativeAdCount;
-
         return ListView.builder(
           padding: const EdgeInsets.symmetric(horizontal: 24),
-          itemCount: totalCount,
+          itemCount: items.length,
           itemBuilder: (context, index) {
-            if (nativeAdCount > 0 &&
-                index > 0 &&
-                (index + 1) % (nativeAdInterval + 1) == 0) {
-              return const NativeAdWidget();
-            }
-
-            final realIndex = nativeAdCount > 0
-                ? index - (index ~/ (nativeAdInterval + 1))
-                : index;
-
-            if (realIndex >= items.length) return const SizedBox.shrink();
-
             return ResultCard(
-              result: items[realIndex],
+              result: items[index],
               onTap: () async {
                 FocusScope.of(context).unfocus();
                 final historyRepo = await ref.read(
@@ -453,12 +432,12 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                 );
                 await historyRepo.add(
                   _controller.text.trim(),
-                  wordId: items[realIndex].wordId,
+                  wordId: items[index].wordId,
                 );
                 ref.invalidate(recentSearchesProvider);
                 ref.invalidate(historyListProvider);
                 if (context.mounted) {
-                  context.push('/word/${items[realIndex].wordId}');
+                  context.push('/word/${items[index].wordId}');
                 }
               },
             );

@@ -321,7 +321,7 @@ class _SplashScreenState extends State<SplashScreen>
                       );
                     },
                     child: const Text(
-                      "Topso'z",
+                      "Lug'atchi",
                       style: TextStyle(
                         fontSize: 42,
                         fontWeight: FontWeight.w800,

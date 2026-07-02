@@ -1,0 +1,13 @@
+Lug'atchi is a free, fully offline Uzbek-English-Russian dictionary. No internet connection, no account, no ads.
+
+FEATURES
+- Trilingual lookup: Uzbek ⇄ English ⇄ Russian
+- Instant, typo-tolerant full-text search
+- Works with both Latin and Cyrillic Uzbek script — search "o'zbek" or "ўзбек", results match either way
+- Favorites and search history, stored only on your device
+- Light and dark themes, adjustable font size
+- Entire dictionary is bundled in the app — works with airplane mode on
+
+Lug'atchi aggregates multiple open dictionary sources into a single searchable database, so a single search shows you headwords, part of speech, definitions in both English and Russian, and example sentences where available.
+
+Your privacy: Lug'atchi does not collect, store, or transmit any personal data. Everything — history, favorites, settings — stays on your device. There is no analytics, no tracking, and no ads.

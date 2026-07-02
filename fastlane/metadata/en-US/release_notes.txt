@@ -1,0 +1,1 @@
+Initial release of Lug'atchi for iOS: offline Uzbek-English-Russian dictionary with Latin/Cyrillic search, favorites, and history.
