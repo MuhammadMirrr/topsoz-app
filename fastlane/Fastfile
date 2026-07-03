@@ -53,6 +53,26 @@ platform :ios do
     end
   end
 
+  desc "Diagnostika: joriy versiyada screenshot bor-yo'qligini tekshirish (o'qish uchun)"
+  lane :check_screenshots do
+    lugatchi_api_key
+    app = Spaceship::ConnectAPI::App.find("com.uzbapps.avom")
+    versions = app.get_app_store_versions
+    versions.each do |v|
+      UI.message("Versiya: #{v.version_string} (#{v.app_store_state})")
+      locs = v.get_app_store_version_localizations
+      locs.each do |loc|
+        shots = loc.get_app_screenshot_sets
+        if shots.empty?
+          UI.message("  #{loc.locale}: screenshot yo'q")
+        end
+        shots.each do |s|
+          UI.message("  #{loc.locale} / #{s.screenshot_display_type}: #{s.app_screenshots&.count || 0} ta")
+        end
+      end
+    end
+  end
+
   desc "Faqat matn metadata'ni yuklash (tavsif, kalit so'z, copyright va h.k.) — binary/screenshotga tegmaydi"
   lane :metadata do
     upload_to_app_store(
@@ -66,4 +86,176 @@ platform :ios do
       precheck_include_in_app_purchases: false
     )
   end
+
+  desc "Faqat screenshotlarni yuklash — binary/matn metadata'ga tegmaydi"
+  lane :screenshots do
+    upload_to_app_store(
+      api_key: lugatchi_api_key,
+      app_identifier: "com.uzbapps.avom",
+      skip_binary_upload: true,
+      skip_screenshots: false,
+      skip_metadata: true,
+      overwrite_screenshots: true,
+      submit_for_review: false,
+      force: true,
+      precheck_include_in_app_purchases: false
+    )
+  end
+
+  desc "Tayyor versiyani Apple review'ga yuborish (binary/metadata/screenshotga tegmaydi, faqat submit qiladi)"
+  lane :submit do
+    upload_to_app_store(
+      api_key: lugatchi_api_key,
+      app_identifier: "com.uzbapps.avom",
+      skip_binary_upload: true,
+      skip_screenshots: true,
+      skip_metadata: true,
+      submit_for_review: true,
+      automatic_release: true,
+      force: true,
+      precheck_include_in_app_purchases: false,
+      submission_information: {
+        add_id_info_uses_idfa: false,
+        export_compliance_uses_encryption: false
+      }
+    )
+  end
+
+  desc "Review uchun qolgan majburiy deklaratsiyalarni to'ldirish: yosh reytingi, kontent huquqi, narx (Free), data usage (ma'lumot yig'ilmaydi)"
+  lane :fix_review_requirements do
+    lugatchi_api_key
+    app = Spaceship::ConnectAPI::App.find("com.uzbapps.avom")
+
+    UI.message("Content rights declaration...")
+    app.update(attributes: { content_rights_declaration: "DOES_NOT_USE_THIRD_PARTY_CONTENT" })
+
+    UI.message("Yosh reytingi (hammasi NONE/false — lug'at ilovasida bunday kontent yo'q)...")
+    info = app.fetch_edit_app_info
+    decl = info.fetch_age_rating_declaration
+    decl.update(attributes: {
+      alcohol_tobacco_or_drug_use_or_references: "NONE",
+      contests: "NONE",
+      gambling_simulated: "NONE",
+      guns_or_other_weapons: "NONE",
+      horror_or_fear_themes: "NONE",
+      mature_or_suggestive_themes: "NONE",
+      medical_or_treatment_information: "NONE",
+      profanity_or_crude_humor: "NONE",
+      sexual_content_graphic_and_nudity: "NONE",
+      sexual_content_or_nudity: "NONE",
+      violence_cartoon_or_fantasy: "NONE",
+      violence_realistic_prolonged_graphic_or_sadistic: "NONE",
+      violence_realistic: "NONE",
+      advertising: false,
+      age_assurance: false,
+      gambling: false,
+      health_or_wellness_topics: false,
+      loot_box: false,
+      messaging_and_chat: false,
+      parental_controls: false,
+      unrestricted_web_access: false,
+      user_generated_content: false
+    })
+
+    # Data usage (App Privacy) — bu fastlane versiyasidagi ConnectAPI endpoint
+    # ("dataUsagePublishState") Apple tomonidan eskirgan/o'zgartirilgan, shu
+    # sabab qo'lda: App Store Connect > App Privacy > Get Started > "No, we
+    # do not collect data" > Publish.
+
+    UI.success("Tayyor: content rights va yosh reytingi yangilandi. Narx va App Privacy'ni qo'lda to'ldiring.")
+  end
+
+  desc "Diagnostika: versiyaga biriktirilgan build va device family holatini ko'rsatish"
+  lane :check_build do
+    lugatchi_api_key
+    app = Spaceship::ConnectAPI::App.find("com.uzbapps.avom")
+    v = app.get_app_store_versions.first
+    UI.message("Versiya: #{v.version_string}, holat: #{v.app_store_state}")
+    build = v.get_build
+    if build
+      UI.message("Biriktirilgan build: #{build.version} (id=#{build.id}, processing=#{build.processing_state})")
+    else
+      UI.message("Versiyaga hech qanday build biriktirilmagan!")
+    end
+  end
+
+  desc "Diagnostika: app resource'ining xom relationships ro'yxatini chop etish (token hech qayerga yozilmaydi)"
+  lane :dump_relationships do
+    lugatchi_api_key
+    require 'net/http'
+    require 'json'
+    token = Spaceship::ConnectAPI.token.text
+    uri = URI("https://api.appstoreconnect.apple.com/v1/apps?filter[bundleId]=com.uzbapps.avom")
+    req = Net::HTTP::Get.new(uri)
+    req['Authorization'] = "Bearer #{token}"
+    res = Net::HTTP.start(uri.host, uri.port, use_ssl: true) { |http| http.request(req) }
+    body = JSON.parse(res.body)
+    rels = body.dig("data", 0, "relationships")&.keys || []
+    UI.message("App relationships: #{rels.join(', ')}")
+  end
+
+  desc "Narxni Free (0.00 USD, barcha hududlarda) qilib belgilash — appPriceSchedule orqali"
+  lane :set_free_pricing do
+    lugatchi_api_key
+    require 'net/http'
+    require 'json'
+    token = Spaceship::ConnectAPI.token.text
+
+    api = ->(method, path, body = nil) {
+      uri = URI("https://api.appstoreconnect.apple.com#{path}")
+      req = method == :get ? Net::HTTP::Get.new(uri) : Net::HTTP::Post.new(uri)
+      req['Authorization'] = "Bearer #{token}"
+      req['Content-Type'] = 'application/json'
+      req.body = JSON.generate(body) if body
+      res = Net::HTTP.start(uri.host, uri.port, use_ssl: true) { |http| http.request(req) }
+      [res.code.to_i, (JSON.parse(res.body) rescue {})]
+    }
+
+    app_id_code, app_body = api.call(:get, "/v1/apps?filter[bundleId]=com.uzbapps.avom")
+    app_id = app_body.dig("data", 0, "id")
+    UI.message("App id: #{app_id}")
+
+    code, body = api.call(:get, "/v1/apps/#{app_id}/appPricePoints?filter[territory]=USA&limit=50")
+    UI.message("Price points status: #{code}")
+    free_point = (body["data"] || []).find { |d| d.dig("attributes", "customerPrice").to_f == 0.0 }
+    raise "Free narx nuqtasi topilmadi: #{body}" unless free_point
+    UI.message("Free price point id: #{free_point['id']}")
+
+    payload = {
+      data: {
+        type: "appPriceSchedules",
+        relationships: {
+          app: { data: { type: "apps", id: app_id } },
+          baseTerritory: { data: { type: "territories", id: "USA" } },
+          manualPrices: {
+            data: [{ type: "appPrices", id: "${new_price}" }]
+          }
+        }
+      },
+      included: [
+        {
+          type: "appPrices",
+          id: "${new_price}",
+          attributes: { startDate: nil },
+          relationships: {
+            appPricePoint: { data: { type: "appPricePoints", id: free_point['id'] } }
+          }
+        }
+      ]
+    }
+    code, body = api.call(:post, "/v1/appPriceSchedules", payload)
+    UI.message("Price schedule create status: #{code}")
+    if code >= 200 && code < 300
+      UI.success("Narx Free qilib belgilandi!")
+    else
+      UI.error("Xato: #{JSON.pretty_generate(body)}")
+    end
+  end
+
+  # App Privacy (data usage javoblari) — Apple bu API'ni App Store Connect
+  # sayti bilan cheklab qo'ygan, hech qanday relationship/endpoint orqali
+  # dasturiy yo'l topilmadi (bir nechta yo'l sinab ko'rildi: dataUsages,
+  # appDataUsagesPublishState, dataUsagePlan, va h.k. — hammasi 404/400).
+  # Faqat qo'lda: App Store Connect > App Privacy > Get Started > "No, we do
+  # not collect data" > Publish.
 end

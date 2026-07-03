@@ -1,7 +1,7 @@
 name: topsoz
 description: "Lug'atchi — O'zbek-Ingliz-Rus offline lug'at ilovasi"
 publish_to: 'none'
-version: 1.0.2+5
+version: 1.0.2+6
 
 environment:
   sdk: ^3.10.7
