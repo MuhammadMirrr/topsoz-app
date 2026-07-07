@@ -111,14 +111,6 @@ Diagnostika: app resource'ining xom relationships ro'yxatini chop etish (token h
 
 Narxni Free (0.00 USD, barcha hududlarda) qilib belgilash — appPriceSchedule orqali
 
-### ios probe_privacy
-
-```sh
-[bundle exec] fastlane ios probe_privacy
-```
-
-Diagnostika: data usage / app privacy uchun mumkin bo'lgan yo'llarni sinab ko'rish
-
 ----
 
 This README.md is auto-generated and will be re-generated every time [_fastlane_](https://fastlane.tools) is run.
