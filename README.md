@@ -236,4 +236,4 @@ MIT © 2026 Muhammad Mirqobilov — راجع [LICENSE](LICENSE).
 
 ## Author
 
-**Muhammad Mirqobilov** — [@MuhammadMirrr](https://github.com/MuhammadMirrr) · muhammadmirqobilov@gmail.com
+**Muhammad Mirqobilov** (Mirkabilov) — [mirqobilov.com/about](https://mirqobilov.com/about) · [@MuhammadMirrr](https://github.com/MuhammadMirrr) · muhammadmirqobilov@gmail.com
