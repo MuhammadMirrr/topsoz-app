@@ -120,3 +120,18 @@ Theme mode is user-toggleable via `themeModeProvider` (persisted in SharedPrefer
 ## Language
 
 All UI strings, comments, and user-facing text should be in Uzbek. Technical terms and code identifiers remain in English.
+
+## App Store Connect — keyingi release'da majburiy (2026-09-22 dan)
+
+Jonli versiyada Support URL / Marketing URL maydonlari qulflangan, faqat yangi versiya
+yaratilganda tahrirlanadi. **Har yangi versiya yaratilganda App Store Connect'da:**
+
+- **Support URL** → `https://mirqobilov.com/about`
+- **Marketing URL** → `https://mirqobilov.com/about`
+- Copyright: `Muhammad Mirqobilov` (o'zgartirmang; Apple Developer yuridik ismi
+  pasport bo'yicha *Mirkabilov* bo'lib qoladi — bu normal, `mirqobilov.com/about`
+  sahifasida ikkala yozuv ham izohlangan).
+
+Sabab: Google'da shaxsiy brendni bitta kanonik sahifaga (`mirqobilov.com/about`,
+Person `@id`) bog'lash. Release checklist'iga shu bandni qo'shing va versiyani
+yuborishdan oldin ikkala URL to'ldirilganini tekshiring.
